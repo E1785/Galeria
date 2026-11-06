@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi Galería Personal</title>
+    <!-- Cargamos la librería oficial de Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f4f4f9; margin: 0; padding: 20px; text-align: center; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .upload-section { margin-bottom: 30px; padding: 20px; border: 2px dashed #ccc; border-radius: 8px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; margin-top: 20px; }
+        .card { background: #eee; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; }
+        .card img, .card video { max-width: 100%; max-height: 150px; border-radius: 4px; object-fit: cover; }
+        .btn { margin-top: 10px; background: #0070f3; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; text-decoration: none; font-size: 14px; width: 100%; text-align: center; box-sizing: border-box; }
+        .btn-download { background: #22c55e; }
+        .btn-delete { background: #ef4444; }
+        .btn-delete:hover { background: #dc2626; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Mi Galería de Medios</h1>
+    
+    <!-- Sección para Subir Archivos -->
+    <div class="upload-section">
+        <h3>Subir Imagen o Video</h3>
+        <input type="file" id="file-input" accept="image/*,video/*">
+        <button class="btn" id="btn-subir">Subir a la nube</button>
+    </div>
+
+    <!-- Sección de la Galería -->
+    <h2>Tus Archivos</h2>
+    <div class="grid" id="galeria-grid">Cargando archivos...</div>
+</div>
+
+<script>
+    const SUPABASE_URL = "https://lnootaxeyiwwqbvajnoq.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxub290YXhleWl3d3FidmFqbm9xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI3OTcxOTksImV4cCI6MjEwODM3MzE5OX0.Lv9wOF7YukahY-8X46_oA1DA1Jbk55g3AQUC5I-9SW4"; 
+    
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const BUCKET_NAME = 'galeria';
+
+    async function subirArchivo() {
+        const fileInput = document.getElementById('file-input');
+        const file = fileInput.files[0];
+        if (!file) return alert('Por favor, selecciona un archivo primero.');
+
+        const nombreUnico = `${Date.now()}_${file.name}`;
+        
+        const { data, error } = await supabaseClient.storage
+            .from(BUCKET_NAME)
+            .upload(nombreUnico, file);
+
+        if (error) {
+            alert('Error al subir: ' + error.message);
+        } else {
+            alert('¡Archivo subido con éxito!');
+            fileInput.value = ''; // Limpiar el input
+            cargarGaleria();
+        }
+    }
+
+    // NUEVA FUNCIÓN: Eliminar archivo de Supabase Storage
+    async function eliminarArchivo(nombreArchivo) {
+        if (!confirm(`¿Estás seguro de que deseas eliminar "${nombreArchivo}"?`)) return;
+
+        const { data, error } = await supabaseClient.storage
+            .from(BUCKET_NAME)
+            .remove([nombreArchivo]);
+
+        if (error) {
+            alert('Error al eliminar el archivo: ' + error.message);
+        } else {
+            alert('Archivo eliminado correctamente.');
+            cargarGaleria(); // Recargar la galería para actualizar la vista
+        }
+    }
+
+    async function cargarGaleria() {
+        const grid = document.getElementById('galeria-grid');
+        grid.innerHTML = 'Cargando...';
+
+        const { data: archivos, error } = await supabaseClient.storage
+            .from(BUCKET_NAME)
+            .list('', { limit: 100, sortBy: { column: 'created_at', order: 'desc' } });
+
+        if (error) {
+            grid.innerHTML = 'Error al cargar los archivos.';
+            return;
+        }
+
+        if (archivos.length === 0) {
+            grid.innerHTML = 'No hay archivos subidos todavía.';
+            return;
+        }
+
+        grid.innerHTML = '';
+        archivos.forEach(archivo => {
+            const { data: { publicUrl } } = supabaseClient.storage
+                .from(BUCKET_NAME)
+                .getPublicUrl(archivo.name);
+
+            const card = document.createElement('div');
+            card.className = 'card';
+            const esVideo = archivo.name.match(/\.(mp4|webm|ogg|mov)$/i);
+
+            // Contenido multimedia
+            card.innerHTML = esVideo 
+                ? `<video src="${publicUrl}" controls></video>` 
+                : `<img src="${publicUrl}" alt="Imagen">`;
+            
+            // Botón de Descargar
+            card.innerHTML += `<a href="${publicUrl}" download="${archivo.name}" target="_blank" class="btn btn-download">Descargar</a>`;
+            
+            // Botón de Borrar (creado como elemento para enlazar el evento click de forma limpia)
+            const btnEliminar = document.createElement('button');
+            btnEliminar.className = 'btn btn-delete';
+            btnEliminar.textContent = 'Eliminar';
+            btnEliminar.onclick = () => eliminarArchivo(archivo.name);
+            
+            card.appendChild(btnEliminar);
+            grid.appendChild(card);
+        });
+    }
+
+    // Inicializar eventos principales
+    document.getElementById("btn-subir").addEventListener("click", subirArchivo);
+    cargarGaleria();
+</script>
+
+</body>
+</html>
